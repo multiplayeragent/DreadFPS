@@ -1,10 +1,10 @@
 // Entry point: boot, input, state machine (title -> connecting -> playing <-> paused) and the frame loop.
 // Online and practice share one path: a connection (net.js) feeds the client netcode (client.js), which feeds the view (game.js).
-import { THREE, G, ART, ui, ctx, camera, renderer, resize, renderFrame, compileScene, postMat, loadAssets, onResize, rand, clamp, drawText } from './core.js';
+import { THREE, G, ART, ui, ctx, camera, renderer, scene, resize, renderFrame, compileScene, postMat, loadAssets, onResize, rand, clamp, drawText } from './core.js';
 import { A } from './audio.js';
 import { WEAPONS, DIFFICULTIES, EYE, los } from './sim.js';
 import { MAPS } from './maps.js';
-import { animateLiquids } from './world.js';
+import { animateLiquids, animateSky, sky } from './world.js';
 import { V, loadLevel, syncActors, syncWorld, updateView, localShot, onEvent } from './game.js';
 import { drawHUD, drawTitle, drawLoading, buildBar } from './ui.js';
 import { LocalConn, OnlineConn } from './net.js';
@@ -18,7 +18,7 @@ const savedMenu = (() => { try { return JSON.parse(localStorage.getItem('dread_m
 const urlName = new URLSearchParams(location.search).get('name');
 if (urlName) localStorage.setItem('dread_name', urlName);
 Object.assign(G, {
-  menu: { mode: 0, map: 0, bots: 5, diff: 1, row: 0, ...savedMenu }, name: localStorage.getItem('dread_name') || '',
+  menu: { mode: 0, map: 0, bots: 5, diff: 1, omap: -1, odiff: -1, row: 0, ...savedMenu }, name: localStorage.getItem('dread_name') || '',
   shake: 0, feed: [], center: null, match: { over: false, map: 0 }, roster: [], practice: false, netStatus: '', menuError: '',
   player: { pos: { x: 0, z: 0 }, vel: { x: 0, z: 0 }, y: 0, yaw: 0, pitch: 0, onGround: true, bob: 0, stepAcc: 0, dead: true, deathT: 0, hp: 100, armor: 0, armorAbs: 0,
     rage: 0, weapon: 1, next: 1, switching: 0, ammo: { shells: 0, bullets: 0, rockets: 0, cells: 0 }, owned: [true, true], frags: 0, lastShot: -9, shotN: 0, grin: 0, hurt: 0, pick: 0 },
@@ -29,7 +29,6 @@ onResize.push(buildBar);
 resize();
 
 // ---------- input ----------
-const MENU_ROWS = 4;
 function askName() {
   const n = prompt('Your name for online deathmatch (max 12 letters):', G.name || '');
   if (n === null) return false;
@@ -42,18 +41,23 @@ addEventListener('keydown', e => {
   if (e.code === 'Tab') e.preventDefault();
   if (G.state === 'title') {
     const mn = G.menu, online = mn.mode === 0;
-    if (e.code === 'ArrowUp' || e.code === 'KeyW') mn.row = online ? 0 : (mn.row + MENU_ROWS - 1) % MENU_ROWS;
-    if (e.code === 'ArrowDown' || e.code === 'KeyS') mn.row = online ? 0 : (mn.row + 1) % MENU_ROWS;
+    // online the bot count is fixed (rooms fill to 6), so that row is skipped
+    const rows = online ? [0, 1, 3] : [0, 1, 2, 3], ri = Math.max(0, rows.indexOf(mn.row));
+    if (e.code === 'ArrowUp' || e.code === 'KeyW') mn.row = rows[(ri + rows.length - 1) % rows.length];
+    if (e.code === 'ArrowDown' || e.code === 'KeyS') mn.row = rows[(ri + 1) % rows.length];
     const step = e.code === 'ArrowLeft' || e.code === 'KeyA' ? -1 : e.code === 'ArrowRight' || e.code === 'KeyD' ? 1 : 0;
+    // online map / difficulty also offer -1 = DEFAULT (keep the room's rotation / mixed bots)
+    const cycle = (v, n) => ((v + 1 + step + n + 1) % (n + 1)) - 1;
     if (step) {
-      if (mn.row === 0) { mn.mode = 1 - mn.mode; if (mn.mode === 0) mn.row = 0; }
-      else if (mn.row === 1) mn.map = (mn.map + MAPS.length + step) % MAPS.length;
+      if (mn.row === 0) mn.mode = 1 - mn.mode;
+      else if (mn.row === 1) { if (online) mn.omap = cycle(mn.omap, MAPS.length); else mn.map = (mn.map + MAPS.length + step) % MAPS.length; }
       else if (mn.row === 2) mn.bots = clamp(mn.bots + step, 1, 7);
+      else if (online) mn.odiff = cycle(mn.odiff, DIFFICULTIES.length);
       else mn.diff = (mn.diff + DIFFICULTIES.length + step) % DIFFICULTIES.length;
       A.init(); A.click();
     }
     if (e.code === 'KeyN' && online) askName();
-    localStorage.setItem('dread_menu', JSON.stringify({ mode: mn.mode, map: mn.map, bots: mn.bots, diff: mn.diff }));
+    localStorage.setItem('dread_menu', JSON.stringify({ mode: mn.mode, map: mn.map, bots: mn.bots, diff: mn.diff, omap: mn.omap, odiff: mn.odiff }));
     return;
   }
   if (G.state === 'paused' && e.code === 'KeyQ') { quitToTitle(); return; }
@@ -111,7 +115,7 @@ async function startGame() {
   G.feed = []; G.center = null; G.netStatus = ''; G.roster = [];
   G.match = { over: false, map: G.menu.map, overT: 0 };
   lock();
-  conn = G.practice ? new LocalConn({ map: G.menu.map, bots: G.menu.bots, diff: G.menu.diff }) : new OnlineConn(G.name);
+  conn = G.practice ? new LocalConn({ map: G.menu.map, bots: G.menu.bots, diff: G.menu.diff }) : new OnlineConn(G.name, { map: G.menu.omap, diff: G.menu.odiff });
   client = new Client(conn);
   client.onMap = mi => {
     G.match.map = mi; G.menu.map = G.practice ? mi : G.menu.map;
@@ -280,6 +284,7 @@ function frame() {
   syncWorld(sh.it, client.drops);
   updateView(dt);
   animateLiquids(dt);
+  animateSky();
   G.feed.forEach(m => m.t -= dt);
   G.feed = G.feed.filter(m => m.t > 0);
   if (G.center) { G.center.t -= dt; if (G.center.t <= 0) G.center = null; }
@@ -303,4 +308,4 @@ loadAssets(f => { loadFrac = f; }).then(() => {
 });
 
 // test hook for automated checks
-window.__dread = { G, V, keys, los, renderer, get client() { return client; }, get conn() { return conn; }, startGame, setView: (y, p) => { viewYaw = y; viewPitch = p; } };
+window.__dread = { G, V, keys, los, scene, sky, renderer, get client() { return client; }, get conn() { return conn; }, startGame, setView: (y, p) => { viewYaw = y; viewPitch = p; } };

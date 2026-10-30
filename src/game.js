@@ -35,6 +35,10 @@ const TELEPAD = pxTex(32, 32, 9, (g, r) => {
     if (d < 15 && (Math.sin(a * 3 + d * 0.6) > 0.2 || d > 13 || r() < 0.08)) { g.fillStyle = d > 13 ? '#20a040' : r() < 0.5 ? '#40ff70' : '#a0ffb0'; g.fillRect(x, y, 1, 1); }
   }
 });
+const SHELL = pxTex(6, 3, 130, g => {
+  g.fillStyle = '#a81c14'; g.fillRect(0, 0, 4, 3); g.fillStyle = '#e04a30'; g.fillRect(0, 0, 4, 1);
+  g.fillStyle = '#b89038'; g.fillRect(4, 0, 2, 3); g.fillStyle = '#f0d070'; g.fillRect(4, 0, 2, 1);
+});
 const bloodMat = new THREE.SpriteMaterial({ map: BLOOD, alphaTest: 0.5 });
 const gibMat = new THREE.SpriteMaterial({ map: GIB, alphaTest: 0.5 });
 
@@ -51,7 +55,7 @@ export const bbGroup = new THREE.Group(); // camera-facing sprites
 scene.add(bbGroup);
 
 // everything the view owns for the current level
-export const V = { actors: new Map(), items: [], decor: [], drops: new Map(), projs: [], fx: [], parts: [], tracers: [], corpses: [], pads: [], selfId: null };
+export const V = { actors: new Map(), items: [], decor: [], drops: new Map(), projs: [], fx: [], parts: [], tracers: [], corpses: [], pads: [], shells: [], ejects: [], selfId: null };
 let boomLights = [], teslaLight = null;
 const muzzleLight = new THREE.PointLight(0xffb060, 0, 14, 1.5);
 camera.add(muzzleLight);
@@ -108,7 +112,7 @@ class ActorView {
     const moving = Math.hypot(this.vx, this.vz) > 0.8, step = Math.floor(this.bob / 1.6) % 4;
     if (this.painT > 0 && dot > 0) this.setFrame(c[0], false);
     else if (dot > 0.45) {
-      if (G.time - this.lastShot < 0.06) this.setFrame(a[2], false);
+      if (G.time - this.lastShot < 0.12) this.setFrame(a[2], false);
       else this.setFrame(moving ? [a[1], a[0], b[2], a[0]][step] : a[0], false);
     } else if (dot < -0.45) this.setFrame(moving ? [a[3], b[3]][step % 2] : a[3], false);
     else this.setFrame(moving ? [b[0], b[1]][step % 2] : b[0], fx * rx + fz * rz < 0);
@@ -156,10 +160,11 @@ function clearLevel() {
   for (const p of V.parts) scene.remove(p.s);
   for (const t of V.tracers) { scene.remove(t.line); t.line.geometry.dispose(); }
   for (const p of V.pads) scene.remove(p);
+  for (const s of V.shells) { scene.remove(s.s); s.s.material.dispose(); }
   for (const m of boltGroup.children) m.geometry.dispose();
   boltGroup.clear();
   bbGroup.clear();
-  Object.assign(V, { items: [], decor: [], projs: [], fx: [], parts: [], tracers: [], corpses: [], pads: [] });
+  Object.assign(V, { items: [], decor: [], projs: [], fx: [], parts: [], tracers: [], corpses: [], pads: [], shells: [], ejects: [] });
 }
 function itemMesh(it) {
   const fr = ART.sprites[it.d.spr[0]][it.d.spr[1]];
@@ -298,6 +303,73 @@ function spawnProjVis(pid, kind, owner, o, v, ff = 0) {
 }
 function removeProj(p) { scene.remove(p.s); p.s.material.dispose(); V.projs.splice(V.projs.indexOf(p), 1); }
 
+// ---------- shotgun shells: ejected on the pump / break-open, they tumble and clunk onto the floor ----------
+const EJECT = { 1: { delay: 0.3, n: 1 }, 2: { delay: 0.45, n: 2 } };   // weapon index -> when the action opens, how many shells
+const MAX_SHELLS = 48, SHELL_LIFE = 15;
+function queueEject(id, weapon) {
+  const e = EJECT[weapon];
+  if (e) V.ejects.push({ at: G.time + e.delay, id, n: e.n, ssg: weapon === 2 });
+}
+function ejectShells(ej) {
+  const v = V.actors.get(ej.id);
+  if (!v || v.dead) return;
+  let o, yaw, base;
+  if (v.isSelf) {
+    // first person: out of the right side of the gun, just below the view
+    yaw = camera.rotation.y;
+    const c = camera.position;
+    o = [c.x + Math.cos(yaw) * 0.22 - Math.sin(yaw) * 0.35, c.y - 0.3, c.z - Math.sin(yaw) * 0.22 - Math.cos(yaw) * 0.35];
+    base = [G.player.vel.x, G.player.vel.z];
+  } else {
+    yaw = v.yaw;
+    o = [v.x + Math.cos(yaw) * 0.25 - Math.sin(yaw) * 0.2, v.y + 1.15, v.z - Math.sin(yaw) * 0.25 - Math.cos(yaw) * 0.2];
+    base = [v.vx, v.vz];
+  }
+  const rx = Math.cos(yaw), rz = -Math.sin(yaw), fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+  for (let i = 0; i < ej.n; i++) {
+    // the pump flicks a shell up and to the right; the break-open pops both shells out more gently
+    const side = ej.ssg ? rand(0.8, 1.6) : rand(1.8, 2.8), up = ej.ssg ? rand(1.2, 2.0) : rand(2.4, 3.4), back = ej.ssg ? rand(0.2, 0.7) : rand(0.3, 0.9);
+    const mat = new THREE.SpriteMaterial({ map: SHELL, alphaTest: 0.5, rotation: rand(0, 6.28) });
+    const s = new THREE.Sprite(mat);
+    s.scale.set(0.16, 0.08, 1);
+    const sh = { s, x: o[0] + rx * i * 0.06, y: o[1], z: o[2] + rz * i * 0.06, vx: rx * side + fx * back + base[0], vy: up, vz: rz * side + fz * back + base[1],
+      spin: rand(14, 24) * (Math.random() < 0.5 ? -1 : 1), rest: false, life: SHELL_LIFE };
+    s.position.set(sh.x, sh.y, sh.z);
+    scene.add(s);
+    V.shells.push(sh);
+    if (V.shells.length > MAX_SHELLS) { const old = V.shells.shift(); scene.remove(old.s); old.s.material.dispose(); }
+  }
+}
+function updateShells(dt) {
+  for (let i = V.ejects.length - 1; i >= 0; i--) if (G.time >= V.ejects[i].at) { ejectShells(V.ejects[i]); V.ejects.splice(i, 1); }
+  for (let i = V.shells.length - 1; i >= 0; i--) {
+    const sh = V.shells[i];
+    sh.life -= dt;
+    if (sh.life <= 0) { scene.remove(sh.s); sh.s.material.dispose(); V.shells.splice(i, 1); continue; }
+    if (sh.rest) continue;
+    sh.vy -= 16 * dt;
+    let nx = sh.x + sh.vx * dt, nz = sh.z + sh.vz * dt;
+    const ny = sh.y + sh.vy * dt;
+    const j = idx(nx, nz);
+    if (j < 0 || M.f[j] > sh.y + 0.2 || ny > M.c[j]) { sh.vx *= -0.4; sh.vz *= -0.4; nx = sh.x; nz = sh.z; if (Math.hypot(sh.vx, sh.vz) > 0.8) A.shell(nx, nz, 0.5); }  // wall
+    const k = idx(nx, nz), fl = k < 0 ? sh.y : M.f[k] + 0.03;
+    sh.x = nx; sh.z = nz; sh.y = ny;
+    if (sh.y <= fl) {
+      if (k >= 0 && M.liq[k]) { scene.remove(sh.s); sh.s.material.dispose(); V.shells.splice(i, 1); continue; }   // sinks in lava / slime
+      sh.y = fl;
+      if (-sh.vy > 1) A.shell(sh.x, sh.z, Math.min(1, -sh.vy / 5));
+      sh.vy = -sh.vy * 0.35; sh.vx *= 0.55; sh.vz *= 0.55; sh.spin *= 0.45;
+      if (sh.vy < 0.6) {
+        // come to rest lying on its side
+        sh.rest = true; sh.vy = 0;
+        sh.s.material.rotation = Math.round(sh.s.material.rotation / Math.PI) * Math.PI + rand(-0.2, 0.2);
+      }
+    }
+    if (!sh.rest) sh.s.material.rotation += sh.spin * dt;
+    sh.s.position.set(sh.x, sh.y + 0.03, sh.z);
+  }
+}
+
 // ============================================================
 //  LOCAL SHOT PREDICTION (the shooter sees their own shot instantly; the server confirms damage)
 // ============================================================
@@ -305,6 +377,7 @@ function removeProj(p) { scene.remove(p.s); p.s.material.dispose(); V.projs.spli
 export function localShot(shooter, cmd) {
   const w = WEAPONS[shooter.weapon], self = V.actors.get(V.selfId);
   if (self) { self.lastShot = G.time; self.shotN++; }
+  queueEject(V.selfId, shooter.weapon);
   if (w.id !== 'tesla' || (self && self.shotN % 2)) A.shot(w.sound, shooter.x, shooter.z);
   muzzleLight.intensity = w.melee ? 0 : 8;
   G.shake = Math.max(G.shake, { sshotgun: 0.35, rocket: 0.3, shotgun: 0.2 }[w.id] || 0.1);
@@ -346,6 +419,7 @@ export function onEvent(e, ctx) {
       const w = WEAPONS[e[2]];
       if (w.beam) a.teslaUntil = G.time + 0.15;
       if (!w.beam || a.shotN % 2) A.shot(w.sound, a.x, a.z);
+      queueEject(a.id, e[2]);
       break;
     }
     case 'h': {
@@ -533,6 +607,7 @@ export function updateView(dt) {
   for (const d of V.decor) if (d.lamp) d.lamp.intensity = 30 * (0.8 + 0.2 * Math.sin(G.time * 13 + d.seed) * Math.sin(G.time * 7.7 + d.seed * 2));
   for (const pad of V.pads) pad.rotation.z += dt * 2;
   updateTesla(dt);
+  updateShells(dt);
   for (const l of boomLights) l.intensity *= Math.exp(-dt * 9);
   muzzleLight.intensity *= Math.exp(-dt * 30);
   for (const m of bbGroup.children) m.rotation.y = camera.rotation.y;

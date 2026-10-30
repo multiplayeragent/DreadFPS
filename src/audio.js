@@ -115,6 +115,22 @@ export const A = {
   },
   frag() { if (!this.ctx) return; const b = this.bus(0.35, 0, 0.3); this.tone(b, { dur: 0.15, type: 'square', f0: 880, gain: 0.12 }); this.tone(b, { start: 0.1, dur: 0.3, type: 'square', f0: 1320, gain: 0.1 }); },
   hit() { if (this.ctx) this.tone(this.bus(0.25, 0, 0), { dur: 0.04, type: 'square', f0: 1400, gain: 0.12 }); },
+  // a spent shotgun shell hitting the floor: hollow plastic thock + brass tink
+  shell(x, z, k = 1) {
+    const b = this.at(x, z, 0.4 * k, 0.15);
+    if (!b) return;
+    const f = rand(2600, 3600);
+    this.tone(b, { dur: 0.05, type: 'triangle', f0: f, f1: f * 0.82, gain: 0.3 });
+    this.noise(b, { dur: 0.045, type: 'bandpass', f0: rand(800, 1300), q: 3, gain: 0.55 });
+  },
+  // distant thunder: a crack (when close) rolling into a long low rumble
+  thunder(near = 0.5) {
+    if (!this.ctx) return;
+    const b = this.bus(0.25 + near * 0.35, (Math.random() - 0.5) * 0.6, 0.6);
+    if (near > 0.5) this.noise(b, { dur: 0.35, type: 'highpass', f0: 1500, f1: 400, gain: near * 0.8 });
+    this.noise(b, { start: 0.05, dur: 2.8, f0: 260, f1: 45, gain: 1, attack: 0.15 });
+    this.noise(b, { start: 0.4, dur: 2.2, f0: 140, f1: 40, gain: 0.7, attack: 0.3 });
+  },
   sizzle(x, z) { const b = this.at(x, z, 0.5, 0.1); this.noise(b, { dur: 0.3, type: 'highpass', f0: 2500, gain: 0.4 }); },
   rage() { if (!this.ctx) return; const b = this.bus(0.3, 0, 0.5); this.tone(b, { dur: 0.25, type: 'sawtooth', f0: 70, f1: 110, gain: 0.15 }); },
   win() { if (!this.ctx) return; const b = this.bus(0.5, 0, 0.6); [262, 330, 392, 523].forEach((f, i) => this.tone(b, { start: i * 0.18, dur: 0.9, type: 'square', f0: f, gain: 0.07 })); },

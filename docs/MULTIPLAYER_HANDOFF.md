@@ -10,7 +10,7 @@ Everything a fresh session needs to make DREAD a hosted, server-authoritative mu
 - Art: generated with the Codex CLI, processed by `art/process.py` into `assets/` + `assets/manifest.json` (~1.8 MB: ~102 sprite PNGs, 16 textures, 3 skies, title). That is 132 files, over publish_game's 100-file cap → pack sprites into a few atlas PNGs in `process.py` and slice them into per-frame canvases at load time in `core.js loadAssets` (keep `ART.sprites[name][i] = { img, tex, w, h, ax }` unchanged for the rest of the code).
 
 ## Status (2026-10-29): multiplayer shipped
-- Share link: https://dreaddeathmatch.play.multiplayeragent.com/ · rooms `dread-1..4` (maxClients 8, logic v3, tickRate 20).
+- Share link: https://dreaddeathmatch.play.multiplayeragent.com/ · rooms `dread-1..4` (maxClients 8, logic v4, tickRate 20).
 - Sprites are packed into `assets/atlas_0.png` (`python art/process.py pack` rebuilds it from `art/frames/`); 33 hosted files.
 - New layout: `src/sim.js` pure sim (grid/collision/nav, movement, weapons, lag-comp hitscan, projectiles, items, barrels, bots, match, `mirror(state)`);
   `server/glue.js` room handlers; `tools/build-logic.mjs` -> `dist/dread_logic.js`; `tools/test-logic.mjs` sandbox test (vm, fake clock);
@@ -19,6 +19,8 @@ Everything a fresh session needs to make DREAD a hosted, server-authoritative mu
 - Deploy: build -> create_upload one copy per room -> curl.exe -> deploy_room_logic {uploadId} for dread-1..4. Host: publish_game mode "patch".
 - Platform gotcha: all-digit string fields come back to clients as numbers (`"1101..."` -> `1.1e+25`), so masks are sent as `'m' + digits`.
 - Online bots: per-bot difficulty, ~60% EASY / rest NORMAL (`Sim` option `mix`); kicks keep the ratio. Practice uses the menu difficulty.
+- Room settings: the first human's hello carries `cfg { map, diff }` (-1 = default); `Sim.configure` applies it. Spawns face the most open direction (`openYaw`).
+- Cosmetic, client-only: ejected shotgun shells, tesla idle crackle, sky weather (`animateSky`), muzzle flashes shrunk 50% at atlas pack time (`art/process.py shrink_flashes`).
 - Verified: Chrome + Edge in the same room, bots kicked/re-added, prediction corrections < 0.1 units, lag-comp hits confirmed, map rotation, no room-log errors.
 
 ## File map (original single-player)

@@ -11,8 +11,9 @@ Double-click `PLAY.bat` (or run `node serve.js` and open http://localhost:8642).
 browsers block WebGL textures loaded from `file://`. Three.js and the Multiplayer Agent SDK load from CDNs.
 
 Controls: WASD move · Space jump · mouse aim/fire · 1–7 / wheel weapons · Tab scores · Esc pause.
-Title screen: Left/Right on MODE switches between ONLINE DEATHMATCH and PRACTICE VS BOTS; practice also picks the map,
-bot count (1–7) and difficulty. N changes your online name.
+Title screen: Left/Right on MODE switches between ONLINE DEATHMATCH and PRACTICE VS BOTS. Practice picks the map, bot count
+(1–7) and difficulty. Online, MAP and DIFFICULTY default to the room's rotation and mixed bots; a choice applies when you are
+the first human in a room. N changes your online name.
 
 ## Multiplayer
 

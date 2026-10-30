@@ -48,7 +48,7 @@ export class LocalConn {
 
 // Online: authoritative room logic on Multiplayer Agent. Tries dread-1, dread-2, ... until a join succeeds.
 export class OnlineConn {
-  constructor(name) { this.practice = false; this.name = name; this.interp = 0.1; this.mp = null; }
+  constructor(name, cfg) { this.practice = false; this.name = name; this.cfg = cfg; this.interp = 0.1; this.mp = null; }
   async start(h) {
     if (!window.MP) throw new Error('multiplayer sdk did not load');
     let lastErr = null;
@@ -66,7 +66,7 @@ export class OnlineConn {
     mp.on('ev', d => h.events(d));
     if (mp.onDisconnect) mp.onDisconnect(() => h.status('CONNECTION LOST - RECONNECTING...'));
     if (mp.onReconnect) mp.onReconnect(() => h.status(''));
-    mp.send('hello', { name: this.name });
+    mp.send('hello', { name: this.name, cfg: this.cfg });
     this.onHide = () => this.leave();
     addEventListener('pagehide', this.onHide);
     if (mp.state && mp.state.shared) h.state(mp.state);

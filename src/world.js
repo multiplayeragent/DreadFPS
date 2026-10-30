@@ -1,6 +1,7 @@
 // Level geometry and lighting (rendering only). The collision grid, tracing and nav graph live in sim.js.
 import { THREE, CS, G, scene, ART } from './core.js';
 import { M, loadGrid } from './sim.js';
+import { A } from './audio.js';
 export { M, idx, EYE, PH, STEP } from './sim.js';
 
 const TS = 2;              // world units per texture repeat
@@ -91,8 +92,11 @@ function buildLighting(def) {
   scene.background = ART.sky[def.sky];
   scene.fog = new THREE.FogExp2(def.fog[0], def.fog[1]);
   const hemi = new THREE.HemisphereLight(def.hemi[0], def.hemi[1], def.hemi[2]);
+  sky.hemi = hemi; sky.base = def.hemi[2]; sky.color = new THREE.Color(def.hemi[0]); sky.kind = def.sky;
+  sky.next = G.time + rand(4, 10); sky.pulses = []; scene.backgroundIntensity = 1;
   levelGroup.add(hemi, new THREE.AmbientLight(0x8a7a80, 0.9));
   const sun = new THREE.DirectionalLight(def.sun[0], def.sun[1]);
+  sky.sun = sun; sky.sunBase = def.sun[1];
   const cx = M.W * CS / 2, cz = M.H * CS / 2, [dx, dy, dz] = def.sun[2];
   sun.position.set(cx + dx * 80, dy * 80, cz + dz * 80);
   sun.target.position.set(cx, 0, cz);
@@ -115,6 +119,32 @@ export function addLight(color, intensity, dist, x, y, z) {
   l.intensity = intensity;
   l.position.set(x, y, z);
   return l;
+}
+// ---------- sky weather: every now and then lightning (storm / moon) or a hellfire pulse lights the sky and the level ----------
+const rand = (a, b) => a + Math.random() * (b - a);
+const SKY_FX = {
+  storm: { gap: [5, 14], pulses: () => [[0, 1], [rand(0.08, 0.14), 0], [rand(0.16, 0.3), rand(0.6, 1)]], tint: 0xc8d8ff, decay: 12, thunder: [0.25, 1.2] },
+  moon: { gap: [14, 32], pulses: () => [[0, rand(0.45, 0.7)], [rand(0.1, 0.2), rand(0.2, 0.4)]], tint: 0xd0d8ff, decay: 10, thunder: [1, 2.5] },
+  hell: { gap: [9, 20], pulses: () => [[0, rand(0.6, 0.9)]], tint: 0xff5020, decay: 2.2, thunder: [0, 0.2] },
+};
+export const sky = { hemi: null, sun: null, base: 1, sunBase: 1, color: null, kind: 'moon', next: 0, pulses: [], flash: new THREE.Color() };
+export function animateSky() {
+  const fx = SKY_FX[sky.kind];
+  if (!fx || !sky.hemi) return;
+  if (G.time >= sky.next) {
+    sky.next = G.time + rand(...fx.gap);
+    const t0 = G.time;
+    sky.pulses = fx.pulses().map(([dt, amp]) => ({ t: t0 + dt, amp }));
+    const far = rand(...fx.thunder);
+    setTimeout(() => A.thunder(sky.kind === 'hell' ? 0.6 : 1 - far / 3), far * 1000);
+  }
+  let f = 0;
+  for (const p of sky.pulses) if (G.time >= p.t) f = Math.max(f, p.amp * Math.exp(-(G.time - p.t) * fx.decay));
+  if (sky.kind === 'hell') f *= 0.5 + 0.5 * Math.sin(G.time * 18);   // flickering hellfire
+  scene.backgroundIntensity = 1 + f * 1.6;
+  sky.hemi.intensity = sky.base * (1 + f * 2.2);
+  sky.hemi.color.copy(sky.color).lerp(sky.flash.set(fx.tint), Math.min(1, f));
+  if (sky.sun) sky.sun.intensity = sky.sunBase * (1 + f * 1.2);
 }
 export function animateLiquids(dt) {
   for (const t of M.liquidTex || []) { t.offset.x += dt * 0.03; t.offset.y = Math.sin(G.time * 0.6) * 0.05; }

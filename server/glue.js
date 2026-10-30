@@ -51,7 +51,10 @@ function onInput(id, input) {
 
 function onEvent(id, type, data) {
   ensureSim();
-  if (type === 'hello') sim.setName(id, data && data.name);
+  if (type === 'hello') {
+    sim.setName(id, data && data.name);
+    if (sim.humans() === 1) sim.configure(data && data.cfg);   // only the human who opens the room picks its settings
+  }
   else if (type === 'respawn') sim.requestRespawn(id);
   else if (type === 'ping') emitTo(id, 'pong', { c: data && data.c, st: Math.round(sim.t * 1000) / 1000 });
 }

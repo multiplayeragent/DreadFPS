@@ -168,6 +168,19 @@ export function trace(ox, oy, oz, dx, dy, dz, maxT) {
   }
   return maxT;
 }
+// facing for a fresh spawn: one of the most open directions (never staring into a wall)
+export function openYaw(x, y, z) {
+  const dirs = [];
+  for (let k = 0; k < 16; k++) {
+    // coarse half-unit march: plenty for picking a heading, and cheap enough to run on every map change
+    const ang = k / 16 * Math.PI * 2, dx = -Math.sin(ang), dz = -Math.cos(ang);
+    let t = 0.5;
+    for (; t < 24; t += 0.5) { const i = idx(x + dx * t, z + dz * t); if (i < 0 || y < M.f[i] || y > M.c[i]) break; }
+    dirs.push([t, ang]);
+  }
+  const best = Math.max(...dirs.map(d => d[0]));
+  return pick(dirs.filter(d => d[0] >= best * 0.6))[1] + rand(-0.1, 0.1);
+}
 export function los(ax, ay, az, bx, by, bz) {
   const dx = bx - ax, dy = by - ay, dz = bz - az, d = Math.hypot(dx, dy, dz) || 1e-4;
   return trace(ax, ay, az, dx / d, dy / d, dz / d, d) >= d - 0.05;
@@ -505,6 +518,21 @@ export class Sim {
     if (n !== a.name || first) { a.name = n; if (first) this.e('j', `${n} ENTERED THE ARENA`); }
   }
   humans() { return this.actors.filter(a => !a.bot).length; }
+  // room settings chosen by the human who opens an empty room: map (-1 = keep the rotation) and bot difficulty (-1 = mixed)
+  configure(cfg) {
+    if (!cfg || typeof cfg !== 'object') return;
+    const d = Number.isInteger(cfg.diff) && cfg.diff >= 0 && cfg.diff < DIFFICULTIES.length ? cfg.diff : -1;
+    const m = Number.isInteger(cfg.map) && cfg.map >= 0 && cfg.map < MAPS.length ? cfg.map : -1;
+    const diffNow = this.o.mix ? -1 : DIFFICULTIES.indexOf(this.diff);
+    if (d !== diffNow) {
+      this.o.mix = d < 0;
+      this.diff = DIFFICULTIES[d < 0 ? 1 : d];
+      for (const b of this.actors.filter(a => a.bot)) this.removeActor(b.id);
+      this.fillBots(false);
+      this.e('j', `BOTS: ${d < 0 ? 'MIXED (MOSTLY EASY)' : DIFFICULTIES[d].name}`);
+    }
+    if (m >= 0 && m !== this.mi) this.startMap(m);
+  }
 
   // ---------- map / match ----------
   startMap(mi) {
@@ -529,7 +557,7 @@ export class Sim {
     resetActor(a);
     const s = this.chooseSpawn(a);
     a.x = s.x; a.z = s.z; a.y = groundUnder(s.x, s.z, 0.1, 50);
-    a.yaw = rand(0, Math.PI * 2); a.pitch = 0; a.hist = [];
+    a.yaw = openYaw(s.x, a.y + EYE, s.z); a.pitch = 0; a.hist = [];
     this.telefrag(a, s.x, s.z);
     this.e('t', r2(s.x), r2(a.y), r2(s.z));
   }

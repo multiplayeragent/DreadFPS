@@ -153,6 +153,95 @@ def do_sheet(name, n, mode, p, manifest):
     print(name, [(o["w"], o["h"]) for o in out])
 
 
+# ---------- muzzle flashes: the generated art's flashes are scaled down when the atlas is packed ----------
+FLASH_SCALE = 0.5
+FLASH_WEAPONS = {"wpn_shotgun": [1], "wpn_sshotgun": [1], "wpn_tommy": [1, 2], "wpn_grenade": [1], "wpn_rocket": [1]}
+
+
+def _flash_colour(a):
+    r, g, b = [a[..., i].astype(int) for i in range(3)]
+    mx = np.maximum(np.maximum(r, g), b)
+    warm = ((r > 170) & (r >= g) & (b < r * 0.85)) | ((r > 120) & (g < r * 0.55) & (b < r * 0.55))
+    white = (mx > 225) & (np.abs(r - b) < 70)
+    return (warm | white) & (a[..., 3] > 0)
+
+
+def _paste_scaled(base, flash, mask, ax, ay):
+    """Composite `flash` (pixels under mask) onto `base`, scaled by FLASH_SCALE about (ax, ay)."""
+    ys, xs = np.where(mask)
+    x0, y0, x1, y1 = xs.min(), ys.min(), xs.max() + 1, ys.max() + 1
+    fl = Image.fromarray(flash).crop((x0, y0, x1, y1))
+    sm = np.asarray(fl.resize((max(1, round((x1 - x0) * FLASH_SCALE)), max(1, round((y1 - y0) * FLASH_SCALE))), Image.BOX)).copy()
+    sm[..., 3] = np.where(sm[..., 3] > 100, 255, 0)  # keep the 1-bit alpha
+    out = Image.fromarray(base)
+    out.alpha_composite(Image.fromarray(sm), (int(round(ax - (ax - x0) * FLASH_SCALE)), int(round(ay - (ay - y0) * FLASH_SCALE))))
+    return out
+
+
+def shrink_weapon_flash(fire, rest, dx, band=22):
+    """First-person firing frame: everything above the resting gun's top, plus fire-coloured or off-silhouette pixels just
+    below it, is the flash. It shrinks toward the muzzle."""
+    a = np.asarray(fire).copy()
+    H, W = a.shape[:2]
+    cut = H - rest.height
+    ra = np.zeros((H, W), bool)
+    rr = np.asarray(rest)[..., 3] > 0
+    for y in range(rest.height):
+        xs = np.where(rr[y])[0] + dx
+        xs = xs[(xs >= 0) & (xs < W)]
+        if cut + y >= 0: ra[cut + y, xs] = True
+    sil = dilate(ra, 1)
+    ys = np.arange(H)[:, None]
+    mask = (a[..., 3] > 0) & ((ys < cut) | ((ys < cut + band) & (_flash_colour(a) | ~sil)))
+    if not mask.any():
+        return fire
+    flash = np.zeros_like(a); flash[mask] = a[mask]
+    gun = a.copy(); gun[mask] = 0
+    rows = np.where(gun[..., 3].any(1))[0]
+    rows = rows[rows >= max(0, cut - 4)]
+    top = rows[0] if len(rows) else cut
+    gx = np.where(gun[top:top + 6, :, 3].any(0))[0]
+    return _paste_scaled(gun, flash, mask, int(gx.mean()) if len(gx) else W // 2, top + 2)
+
+
+def shrink_char_flash(fire, grow=3):
+    """Third-person firing frame: the flash is the biggest bright cluster plus its connected fire-coloured rim."""
+    a = np.asarray(fire).copy()
+    r, g, b = [a[..., i].astype(int) for i in range(3)]
+    core = (a[..., 3] > 0) & (r > 215) & (g > 150)
+    if core.sum() < 3:
+        return fire
+    lab, n = ndimage.label(core, structure=np.ones((3, 3)))
+    core = lab == (1 + int(np.argmax(ndimage.sum(core, lab, range(1, n + 1)))))
+    ys, xs = np.where(core)
+    H, W = core.shape
+    cx0, cx1, cy0, cy1 = xs.min(), xs.max(), ys.min(), ys.max()
+    body_left = a[..., 3][:, :cx0].sum() > a[..., 3][:, cx1 + 1:].sum()  # the flash grows away from the body
+    box = np.zeros_like(core)
+    if body_left: box[max(0, cy0 - 4):cy1 + 5, max(0, cx0 - 1):min(W, cx1 + 9)] = True
+    else: box[max(0, cy0 - 4):cy1 + 5, max(0, cx0 - 8):cx1 + 2] = True
+    fire_px = (a[..., 3] > 0) & (((r > 200) & (g > 90) & (b < 140)) | ((r > 130) & (g < r * 0.65) & (b < r * 0.6)))
+    mask = core.copy()
+    for _ in range(grow):
+        mask |= dilate(mask, 1) & fire_px & box
+    flash = np.zeros_like(a); flash[mask] = a[mask]
+    body = a.copy(); body[mask] = 0
+    ax = cx0 if body_left else cx1
+    return _paste_scaled(body, flash, mask, ax, int(round(ys.mean())))
+
+
+def shrink_flashes(manifest, imgs):
+    S = manifest["sprites"]
+    for name, idxs in FLASH_WEAPONS.items():
+        rest = imgs[id(S[name][0])]
+        for i in idxs:
+            fr = S[name][i]
+            imgs[id(fr)] = shrink_weapon_flash(imgs[id(fr)], rest, round(fr["ax"] - S[name][0]["ax"]))
+    for c in CHARS:
+        fr = S[f"char_{c}_a"][2]  # the "firing" pose
+        imgs[id(fr)] = shrink_char_flash(imgs[id(fr)])
+
+
 def pack_atlases(manifest):
     """Shelf-pack every frame into a few atlas PNGs (keeps the hosted build far under 100 files).
     Each frame entry becomes {a: atlas index, x, y, w, h, ax}; the client slices them back out at load time."""
@@ -161,6 +250,7 @@ def pack_atlases(manifest):
             os.remove(os.path.join(OUT, f))
     frames = [fr for frs in manifest["sprites"].values() for fr in frs]
     imgs = {id(fr): Image.open(os.path.join(FRAMES, fr.pop("f") if "f" in fr else fr["src"])).convert("RGBA") for fr in frames}
+    shrink_flashes(manifest, imgs)
     order = sorted(frames, key=lambda fr: -fr["h"])
     atlases, cur = [], None
     for fr in order:

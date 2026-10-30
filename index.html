@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DREAD - Deathmatch</title>
+<link rel="icon" href="data:,">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+  canvas { position: fixed; left: 0; top: 0; width: 100vw; height: 100vh;
+    image-rendering: crisp-edges; image-rendering: pixelated; }
+  #ui { cursor: pointer; }
+</style>
+</head>
+<body>
+<script>window.DREAD_MP = { key: 'pk_live_0f841d4e97c4e3e7f1a26661f813c61a447cbc7c590c2ce6' };</script>
+<script defer src="https://cdn.multiplayeragent.com/sdk/mp.global.js"></script>
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+# generation logs and build output
+art/*.log
+dist/
+node_modules/

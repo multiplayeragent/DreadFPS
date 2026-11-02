@@ -1,0 +1,11 @@
+# generation logs and build output
+art/*.log
+dist/
+node_modules/
+# clean-game-repo: never commit the real key, agent notes or env files
+mp.config.local.js
+.notes/
+.env
+.env.*
+!.env.example
+*.log

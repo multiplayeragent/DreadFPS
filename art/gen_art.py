@@ -1,4 +1,4 @@
-"""Batch-generate DREAD art through the Codex CLI's built-in image generation tool.
+"""Batch-generate DreadFPS art through the Codex CLI's built-in image generation tool.
 
 Usage: python gen_art.py [phase] [--only name1,name2]
   phase 1: everything without references (incl. character sheet A)

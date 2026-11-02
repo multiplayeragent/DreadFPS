@@ -194,7 +194,8 @@ export function drawTitle() {
   ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(0, 0, G.LW, LOW_H);
   const cx = G.LW / 2;
   ctx.globalAlpha = Math.random() < 0.04 ? 0.4 : 1;
-  drawText('DREAD', cx, 14, '#c81a10', 6, 'center', '#300');
+  const ls = Math.min(6, Math.floor((G.LW - 8) / 48)); // 8 glyphs, 6px each: shrink to fit a narrow screen
+  drawText('DREADFPS', cx, 14 + (6 - ls) * 3, '#c81a10', ls, 'center', '#300');
   ctx.globalAlpha = 1;
   drawText('DEATHMATCH', cx, 62, '#d8cfc4', 2, 'center');
   const mn = G.menu, diffCol = ['#80d060', '#ffe040', '#ff9030', '#ff3020'][mn.diff], online = mn.mode === 0;
@@ -217,7 +218,7 @@ export function drawTitle() {
 
 export function drawLoading(f) {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, G.LW, LOW_H);
-  drawText('DREAD', G.LW / 2, 80, '#c81a10', 4, 'center');
+  drawText('DREADFPS', G.LW / 2, 80, '#c81a10', 4, 'center');
   ctx.fillStyle = '#3a1a14'; ctx.fillRect(G.LW / 2 - 80, 140, 160, 6);
   ctx.fillStyle = '#e03020'; ctx.fillRect(G.LW / 2 - 80, 140, Math.round(160 * f), 6);
   drawText('SUMMONING...', G.LW / 2, 152, '#a89888', 1, 'center');

@@ -1,4 +1,4 @@
-# DREAD — Deathmatch
+# DreadFPS
 
 Retro sprite-based FPS in the spirit of Quake, Blood and DOOM. Online, server-authoritative deathmatch on
 [Multiplayer Agent](https://github.com/multiplayeragent/multiplayer-agent), plus offline practice against bots. First to 15 frags wins.
@@ -10,18 +10,32 @@ Retro sprite-based FPS in the spirit of Quake, Blood and DOOM. Online, server-au
 Double-click `PLAY.bat` (or run `node serve.js` and open http://localhost:8642). A local server is required because
 browsers block WebGL textures loaded from `file://`. Three.js and the Multiplayer Agent SDK load from CDNs.
 
-Practice vs bots works straight away. Online deathmatch needs your own game on Multiplayer Agent:
-
-1. Ask your agent to remix this game (the Multiplayer Agent MCP's `remix_game`), or create a game with `create_game`.
-2. Put its publishable key in a new file `mp.config.local.js` next to `index.html`:
-   `window.MP_CONFIG.key = 'pk_live_...';`
-   It's gitignored, so your key never ends up in a commit. `mp.config.js` holds the placeholder.
-3. Deploy the room logic and publish the client (see `docs/HOW_IT_WORKS.md`).
+Practice vs bots works straight away. Online deathmatch needs your own game on Multiplayer Agent.
 
 Controls: WASD move · Space jump · mouse aim/fire · 1–7 / wheel weapons · Tab scores · Esc pause.
 Title screen: Left/Right on MODE switches between ONLINE DEATHMATCH and PRACTICE VS BOTS. Practice picks the map, bot count
 (1–7) and difficulty. Online, MAP and DIFFICULTY default to the room's rotation and mixed bots; a choice applies when you are
 the first human in a room. N changes your online name.
+
+## Make it yours
+
+In [Claude Code](https://claude.com/claude-code) with the
+[Multiplayer Agent plugin](https://github.com/multiplayeragent/multiplayer-agent), run:
+
+```
+/multiplayer-agent:remix dreadfps
+```
+
+Or just ask it to "remix DreadFPS". You get your own copy online at a share link to send your friends. No server to run,
+and the free tier is enough to start.
+
+By hand instead:
+
+1. Create a game with the Multiplayer Agent MCP's `create_game` (or `remix_game` with `dreadfps`).
+2. Put its publishable key in a new file `mp.config.local.js` next to `index.html`:
+   `window.MP_CONFIG.key = 'pk_live_...';`
+   It's gitignored, so your key never ends up in a commit. `mp.config.js` holds the placeholder.
+3. Deploy the room logic and publish the client (see `docs/HOW_IT_WORKS.md`).
 
 ## Multiplayer
 
@@ -63,3 +77,7 @@ All sprites, textures, skies and title art were generated with the Codex CLI's i
 
 Maps are original designs. Design references: the DM4-style layout notes at strlen.com (`dm4ish.txt`) and
 mariteaux's "The Drop" write-up; Freedoom and LibreQuake (BSD-licensed) were consulted as open references only.
+
+## License
+
+[MIT](LICENSE). Take it, change it, ship it.

@@ -1,4 +1,4 @@
-// Minimal static file server for DREAD (WebGL can't use textures from file:// pages).
+// Minimal static file server for DreadFPS (WebGL can't use textures from file:// pages).
 const http = require('http'), fs = require('fs'), path = require('path');
 const root = __dirname, port = +process.argv[2] || 8642;
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.png': 'image/png' };
@@ -11,4 +11,4 @@ http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
     res.end(data);
   });
-}).listen(port, '127.0.0.1', () => console.log(`DREAD running at http://localhost:${port}`));
+}).listen(port, '127.0.0.1', () => console.log(`DreadFPS running at http://localhost:${port}`));

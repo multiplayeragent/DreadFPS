@@ -1,6 +1,6 @@
-# How DREAD works on Multiplayer Agent
+# How DreadFPS works on Multiplayer Agent
 
-DREAD is a server-authoritative deathmatch. The game rules run in a Multiplayer Agent room, clients send only
+DreadFPS is a server-authoritative deathmatch. The game rules run in a Multiplayer Agent room, clients send only
 their inputs, and the same simulation runs in the browser for offline practice.
 
 ## Layout
